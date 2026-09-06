@@ -1,6 +1,322 @@
-&lt;!DOCTYPE html&gt;
-&lt;html lang="ko"&gt;
-&lt;head&gt;
-&lt;meta charset="UTF-8"&gt;
-&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
-&lt;title&gt;쇼핑 리스트&lt;/title&gt;
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>쇼핑 리스트</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 16px;
+    background: #f4f5f7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    padding: 24px;
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    color: #1c1c1e;
+  }
+  .subtitle {
+    margin: 0 0 20px;
+    font-size: 13px;
+    color: #8a8a8e;
+  }
+  form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid #e0e0e5;
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+  }
+  input[type="text"]:focus {
+    border-color: #6c8cff;
+  }
+  button.add-btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #6c8cff;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.add-btn:hover { background: #5578f0; }
+
+  ul#list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  li.item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 4px;
+    border-bottom: 1px solid #f0f0f2;
+  }
+  li.item:last-child { border-bottom: none; }
+  li.item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #6c8cff;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  li.item span.label {
+    flex: 1;
+    font-size: 15px;
+    color: #1c1c1e;
+    word-break: break-word;
+  }
+  li.item.checked span.label {
+    text-decoration: line-through;
+    color: #b0b0b5;
+  }
+  li.item button.del-btn {
+    border: none;
+    background: transparent;
+    color: #c7c7cc;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+  }
+  li.item button.del-btn:hover {
+    color: #ff3b30;
+    background: #fff0f0;
+  }
+  .empty {
+    text-align: center;
+    color: #b0b0b5;
+    font-size: 14px;
+    padding: 24px 0;
+  }
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f2;
+    font-size: 13px;
+    color: #8a8a8e;
+  }
+  .footer button {
+    border: none;
+    background: transparent;
+    color: #8a8a8e;
+    font-size: 13px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .footer button:hover { color: #ff3b30; }
+  .status-msg {
+    text-align: center;
+    color: #ff3b30;
+    font-size: 13px;
+    padding: 8px 0 0;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🛒 쇼핑 리스트</h1>
+    <p class="subtitle">아이템을 추가하고, 체크하고, 지워보세요.</p>
+
+    <form id="add-form">
+      <input type="text" id="item-input" placeholder="살 물건을 입력하세요..." autocomplete="off">
+      <button type="submit" class="add-btn">추가</button>
+    </form>
+
+    <ul id="list"></ul>
+    <p class="empty" id="empty-msg">아직 담긴 항목이 없어요.</p>
+
+    <div class="footer">
+      <span id="count-msg"></span>
+      <button id="clear-checked" type="button" hidden>체크된 항목 지우기</button>
+    </div>
+    <p class="status-msg" id="status-msg" hidden></p>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://zjemgefutbdydqdyofny.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_k5_VZxqjy7n5NZ1Uj3wLxQ_e3E8PstV';
+  const TABLE = 'shopping_items';
+
+  const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const form = document.getElementById('add-form');
+  const input = document.getElementById('item-input');
+  const list = document.getElementById('list');
+  const emptyMsg = document.getElementById('empty-msg');
+  const countMsg = document.getElementById('count-msg');
+  const clearCheckedBtn = document.getElementById('clear-checked');
+  const statusMsg = document.getElementById('status-msg');
+
+  let items = [];
+
+  function showError(message) {
+    statusMsg.textContent = message;
+    statusMsg.hidden = false;
+  }
+
+  function clearError() {
+    statusMsg.hidden = true;
+  }
+
+  async function loadItems() {
+    const { data, error } = await supabaseClient
+      .from(TABLE)
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      showError('목록을 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    clearError();
+    items = data;
+    render();
+  }
+
+  function render() {
+    list.innerHTML = '';
+
+    if (items.length === 0) {
+      emptyMsg.hidden = false;
+    } else {
+      emptyMsg.hidden = true;
+    }
+
+    items.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'item' + (item.checked ? ' checked' : '');
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = item.checked;
+      checkbox.addEventListener('change', () => toggleItem(item, checkbox.checked));
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = item.text;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'del-btn';
+      delBtn.type = 'button';
+      delBtn.textContent = '✕';
+      delBtn.setAttribute('aria-label', '삭제');
+      delBtn.addEventListener('click', () => deleteItem(item.id));
+
+      li.appendChild(checkbox);
+      li.appendChild(label);
+      li.appendChild(delBtn);
+      list.appendChild(li);
+    });
+
+    const checkedCount = items.filter(i => i.checked).length;
+    countMsg.textContent = items.length
+      ? `총 ${items.length}개 중 ${checkedCount}개 완료`
+      : '';
+    clearCheckedBtn.hidden = checkedCount === 0;
+  }
+
+  async function addItem(text) {
+    const { data, error } = await supabaseClient
+      .from(TABLE)
+      .insert({ text, checked: false })
+      .select()
+      .single();
+
+    if (error) {
+      showError('항목을 추가하지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    clearError();
+    items.push(data);
+    render();
+  }
+
+  async function toggleItem(item, checked) {
+    const { error } = await supabaseClient
+      .from(TABLE)
+      .update({ checked })
+      .eq('id', item.id);
+
+    if (error) {
+      showError('항목을 갱신하지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    clearError();
+    item.checked = checked;
+    render();
+  }
+
+  async function deleteItem(id) {
+    const { error } = await supabaseClient
+      .from(TABLE)
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      showError('항목을 삭제하지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    clearError();
+    items = items.filter(i => i.id !== id);
+    render();
+  }
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    addItem(text);
+    input.value = '';
+    input.focus();
+  });
+
+  clearCheckedBtn.addEventListener('click', async () => {
+    const checkedIds = items.filter(i => i.checked).map(i => i.id);
+    if (checkedIds.length === 0) return;
+
+    const { error } = await supabaseClient
+      .from(TABLE)
+      .delete()
+      .in('id', checkedIds);
+
+    if (error) {
+      showError('체크된 항목을 지우지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    clearError();
+    items = items.filter(i => !i.checked);
+    render();
+  });
+
+  loadItems();
+</script>
+</body>
+</html>
